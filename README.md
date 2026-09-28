@@ -37,6 +37,34 @@ Depois, no console do Athena (workgroup criado pelo Terraform), rode `athena/que
 
 **Ao terminar: `terraform destroy`.**
 
+## Resultados (rodada real, ano 2020, COTAHIST_A2020.TXT)
+
+Pipeline testado ponta a ponta na AWS com o arquivo real de 2020 da B3 (não sintético).
+
+**Glue job:** rodou com sucesso na primeira tentativa (2 workers G.1X), gerando 12 partições
+mensais em Parquet (2-4 MB cada, ~35 MB no total).
+
+**Athena — efeito do particionamento** (mesma consulta, com e sem filtro de partição):
+
+| Consulta | Dados verificados | Tempo de execução |
+|---|---|---|
+| `WHERE ano=2020 AND mes=3` (com partição) | 477,57 KB | 616 ms |
+| Sem filtro de partição (ano todo) | 5,35 MB | 2.487 s |
+
+Filtrar por partição escaneou **~11,5x menos dado** (proporcional a 1 de 12 partições) e rodou
+**~4x mais rápido**. Em escala de gigabytes/terabytes essa mesma proporção é a diferença entre
+uma consulta de centavos e uma de dezenas de dólares no Athena (cobrança de US$ 5/TB escaneado).
+
+**Validação analítica — volatilidade anualizada de PETR4 em 2020** (janela móvel de 21 dias):
+a volatilidade sobe de ~11-13% em janeiro para um pico de ~200% entre 25/mar e 06/abr — exatamente
+o período do crash da pandemia e dos circuit breakers na B3 — depois normaliza gradualmente para
+~55-60% em maio. O pipeline reproduz um evento de mercado real e conhecido, o que valida o parser
+e a lógica ponta a ponta (não só a consistência interna testada com dados sintéticos).
+
+**Custo:** infraestrutura completa (S3, Glue, Athena, Budget) rodada e testada permanecendo dentro
+do free tier / créditos, com gasto real desprezível (a rodada inteira do case não chegou a
+consumir de forma perceptível o teto de US$ 10 configurado no Budget).
+
 ## Roteiro de evolução
 1. Semana 1: este repositório rodando ponta a ponta com 1 ano; meça linhas, tempo, GB escaneados.
 2. Semana 2: 10+ anos (mais arquivos); orquestrar com Step Functions (crawl -> job -> teste de qualidade); idempotência e reprocesso por partição.
@@ -44,7 +72,7 @@ Depois, no console do Athena (workgroup criado pelo Terraform), rode `athena/que
 4. Semana 4: qualidade (Glue Data Quality: volume, nulos, `preco_maximo >= preco_minimo`, freshness), IaC completo, streaming opcional (Kinesis -> Firehose).
 
 ## Avisos honestos
-- O layout de `src/cotahist/fields.py` foi escrito a partir do layout oficial da B3, mas **confira contra o PDF que acompanha o download** e rode o parser num arquivo real; os testes usam dados sintéticos gerados pelo mesmo layout (validam consistência interna, não a fidelidade ao arquivo real).
-- `glue/cotahist_to_parquet.py` e `terraform/main.tf` **não foram executados** (sem AWS/Spark aqui). Espere ajustes no primeiro `apply`/execução.
+- O layout de `src/cotahist/fields.py` foi escrito a partir do layout oficial da B3. Já foi validado contra um arquivo real (COTAHIST_A2020.TXT) com resultado coerente (ver seção Resultados), mas se usar outro ano/formato, confira contra o PDF de layout que acompanha o download.
+- `glue/cotahist_to_parquet.py` e `terraform/main.tf` já rodaram com sucesso em conta AWS real (ver Resultados). Mesmo assim, revise o `terraform plan` antes de aplicar em outra conta — nomes de bucket e valores de budget são específicos do ambiente de quem criou o repositório.
 - Confira a URL de download no site da B3; ela já mudou no passado.
-- Custo: 2 workers G.1X, timeout 30 min, Athena limitado a 10 GB/consulta, Budget com alerta. Ainda assim, cheque o Billing e rode `terraform destroy`.
+- Custo: 2 workers G.1X, timeout 30 min, Athena limitado a 10 GB/consulta, Budget com alerta e Budget Action (bloqueio automático via IAM policy em 100% do gasto real). Ainda assim, cheque o Billing e rode `terraform destroy` ao terminar.
