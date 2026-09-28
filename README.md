@@ -2,6 +2,8 @@
 
 Objetivo: treinar um pipeline de dados de volume na AWS com a série histórica da B3.
 
+> **Não é da área de dados?** Comece por [`docs/GUIA_DO_PROJETO.md`](docs/GUIA_DO_PROJETO.md) (o que cada pasta, arquivo e função faz, passo a passo) e depois [`docs/ESTUDO.md`](docs/ESTUDO.md) (os conceitos).
+
 ```
 B3 (COTAHIST .TXT, posição fixa, 245 bytes)
   -> S3 raw/
